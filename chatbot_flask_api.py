@@ -4,7 +4,7 @@ import json
 import requests
 import os
 from src import RAG_gen
-from src import gen_vector_db
+import src.gen_vector_db as gen_vector_db
 import pickle
 
 app_chatbot = Flask(__name__)
@@ -119,10 +119,10 @@ def chatbot():
 		db_to_get= website_db[wordpress_site]
 		
 		if query != "":
-			init_similar_posts = gen_vector_db.find_simposts_in_db(db_to_get, query, 10)
-			response = RAG_gen.generate_rag_response(db_to_get, query, init_similar_posts)
+			#init_similar_posts = gen_vector_db.find_simposts_in_db(db_to_get, query, 10)
+			response = RAG_gen.generate_rag_response(db_to_get, query)
 
-			json_resp = jsonify({"chatbot_response" : response})
+			json_resp = json.dumps({"chatbot_response" : response})
 			print(json_resp)
 			return json_resp
 		else:

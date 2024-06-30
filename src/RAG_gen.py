@@ -1,10 +1,10 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from transformers import RagTokenizer, RagSequenceForGeneration, RagRetriever
-from gen_vector_db import FAISSVectorDB, find_simposts_in_db
+from src.gen_vector_db import FAISSVectorDB, find_simposts_in_db
 from torch import cuda
 import torch
 import requests
-from secret import OPENAI_API_KEY
+from src.secret import OPENAI_API_KEY
 from openai import OpenAI
 
 
@@ -21,13 +21,14 @@ from openai import OpenAI
 # it should be inflluenced by.
 
 
-openai_api = OpenAI(api_key = "")
+openai_api = OpenAI(api_key = OPENAI_API_KEY)
 
 def get_openai_response(query):
-	draft_prompt """
+	draft_prompt = """
 	NOTE: Answer the following question in a step-by-step manner.
 	Be Careful! Answer the question in a structural manner and in several paragraphs. Use '\n\n' to
 	split the answer into paragraphs. Respond to the question directly without any explanation or introductions anywhere  
+	
 	"""
 
 	system_prompt = """You are GPT-3.5 Turbo. You will be answering a series of Questions and Answers like an 
@@ -49,7 +50,7 @@ def get_openai_response(query):
 		temperature= 0.3
 
 		).choices[0].message.content 
-
+	print("ZERO SHOT COT - ", zero_shot_COT)
 	return zero_shot_COT
 
 def gen_question(question, answer):
@@ -67,20 +68,22 @@ Just output the query directly! Do not add explanations and introducement along 
 
 
 	new_question = openai_api.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": f"##Question: {question}\n\n##Content: {answer}\n\n##Instruction: {quest_prompt}"
-            }
-        ],
-        temperature = 1.0
-    ).choices[0].message.content
-    return new_question
+		model="gpt-3.5-turbo",
+		messages=[
+			{
+				"role": "system",
+				"content": system_prompt
+			},
+			{
+				"role": "user",
+				"content": f"##Question: {question}\n\n##Content: {answer}\n\n##Instruction: {quest_prompt}"
+			}
+		],
+		temperature = 1.0
+	).choices[0].message.content
+
+	print("New Query - ", new_question)
+	return new_question
 
 def revise_ans(question, answer, content):
 	revise_dirn= """
@@ -100,20 +103,20 @@ Output the revise answer directly without any explanations and introducements in
 
 	revised = openai_api.chat.completions.create(
 		model="gpt-3.5-turbo",
-        messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": f"##Existing Text in Wiki Web: {content}\n\n##Question: {question}\n\n##Answer: {answer}\n\n##Instruction: {revise_prompt}"
-                }
-            ],
-         temperature = 1.0
-    ).choices[0].message.content
+		messages=[
+				{
+					"role": "system",
+					"content": system_prompt
+				},
+				{
+					"role": "user",
+					"content": f"##Existing Text in Wiki Web: {content}\n\n##Question: {question}\n\n##Answer: {answer}\n\n##Instruction: {revise_dirn}"
+				}
+			],
+		 temperature = 1.0
+	).choices[0].message.content
 
-
+	print("REVISION - ", revised)
 	return revised
 
 def generate_rag_response(db, query):
@@ -123,7 +126,7 @@ def generate_rag_response(db, query):
 	zero_shot_COT = get_openai_response(query)
 	steps= zero_shot_COT.split('\n\n')
 
-	if(!len(steps)):
+	if(len(steps) == 0):
 		return "Error in getting Initial COT steps"
 
 	answer = ""
@@ -137,6 +140,8 @@ def generate_rag_response(db, query):
 	
 		for post in similar_posts:
 			answer = revise_ans(query, answer, post)
+
+	print("Final Answer - ", answer)
 	return answer
 
 
