@@ -1,6 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from transformers import RagTokenizer, RagSequenceForGeneration, RagRetriever
-from src.gen_vector_db import FAISSVectorDB, find_simposts_in_db
+from gen_vector_db import FAISSVectorDB, find_simposts_in_db
 from torch import cuda
 import torch
 import requests
@@ -19,95 +19,126 @@ import requests
 # RAT also gives the opportunity to the LLM to decide what extent of RAG Context
 # it should be inflluenced by.
 
-def generate_rag_response(db, query, sim_posts):
+
+openai_api = OpenAI(api_key = "")
+
+def get_openai_response(query):
+	draft_prompt """
+	NOTE: Answer the following question in a step-by-step manner.
+	Be Careful! Answer the question in a structural manner and in several paragraphs. Use '\n\n' to
+	split the answer into paragraphs. Respond to the question directly without any explanation or introductions anywhere  
+	"""
+
+	system_prompt = """You are GPT-3.5 Turbo. You will be answering a series of Questions and Answers like an 
+						intelligent chatbot connected to a WordPress Blog
+	"""
+
+	zero_shot_COT= openai_api.chat.completions.create(
+		model= "gpt-3.5-turbo",
+		messages = [
+			{
+				"role" : "system",
+				"content" : system_prompt
+			},
+			{
+				"role" : "user",
+				"content" : f"Question - {query}" + draft_prompt
+			}
+		],
+		temperature= 0.3
+
+		).choices[0].message.content 
+
+	return zero_shot_COT
+
+def gen_question(question, answer):
+	quest_prompt = """
+I want to verify the correctness of the given question, especially giving important to the last sentences.
+Please summarize the content with a follow up question which will correctly correspond. You need to ensure that
+some important keywords of the answer/content are included in this query. Give special importance to the last few sentences
+**IMPORTANT**
+Just output the query directly! Do not add explanations and introducement along with it. 
+	"""
+
+	system_prompt = """You are GPT-3.5 Turbo. You will be answering a series of Questions and Answers like an 
+						intelligent chatbot connected to a WordPress Blog
+	"""
+
+
+	new_question = openai_api.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": f"##Question: {question}\n\n##Content: {answer}\n\n##Instruction: {quest_prompt}"
+            }
+        ],
+        temperature = 1.0
+    ).choices[0].message.content
+    return new_question
+
+def revise_ans(question, answer, content):
+	revise_dirn= """
+I want to revise the answer according the content that has been provided. You need to keep in mind the following steps
+If you find some errors in the answers, revise the answer to make it better according to the content
+If you find some necessary details are ignored, add them to the answer.
+If you the answer is correct and the content does not add anything significant, keep the original answer
+
+IMPORTANT - Keep the structure as it is! (multiple paragrahps) in the revised answer.
+Split the paragraphs only with '\n\n' characters. You need to make sure the answer is structural.
+Output the revise answer directly without any explanations and introducements in your answer. 
+	"""
+
+	system_prompt = """You are GPT-3.5 Turbo. You will be answering a series of Questions and Answers like an 
+						intelligent chatbot connected to a WordPress Blog
+	"""
+
+	revised = openai_api.chat.completions.create(
+		model="gpt-3.5-turbo",
+        messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": f"##Existing Text in Wiki Web: {content}\n\n##Question: {question}\n\n##Answer: {answer}\n\n##Instruction: {revise_prompt}"
+                }
+            ],
+         temperature = 1.0
+    ).choices[0].message.content
+
+
+	return revised
+
+def generate_rag_response(db, query):
 
 	#sim_posts = find_simposts_in_db(db, query, 10)
-	context = ' '.join(f"{post}\n\n" for post in sim_posts)
-
-	# ZERO SHOT COT
-
-	initial_prompt = f'''[INST] 
-					Try to answer this question/instruction with step-by-step thoughts 
-					and make the answer structural. Respond to the instruction directly. DO NOT add
-					any additional explanations and introducements in the answer. 
-
-					[Question] - {query}
-
-					Explain your Reasoning Step-by-Step on why you came to the conclusion. 
-					
-					[/INST]
-	'''
-
-
-	zero_COT_prompt = {
-	"inputs": f"{initial_prompt}",
-	"parameters" : {
-		"max_new_tokens" : 250, 
-		"temperature" : 0.2
-
-	}
-	}
-
-	print(initial_prompt)
-
-	API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
-	headers = {"Authorization": "Bearer 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"}
-
-	response_COT = requests.post(API_URL, headers=headers, json=zero_COT_prompt)
-
-	zero_COT_ans= response_COT.json()[0]['generated_text'].split("[/INST]")[1]
-
-	print(zero_COT_ans)
-
-	# GIVING ZERO SHOT COT OUTPUT AND ADDING RAG BASED CONTEXT
-
-	prompt_template = f'''[INST] 
-					Try to answer this question/instruction with step-by-step thoughts 
-					and make the answer structural. Respond to the instruction directly. DO NOT add
-					any additional explanations and introducements in the answer. 
-
-					[Question] - {query}
-
-					Explain your Reasoning Step-by-Step on why you came to the conclusion. 
-					
-					[/INST]
-
-					ANSWER- {zero_COT_ans}
-
-					[INST]
-
-					I want to check if your answer is correct. Here is some additional context for you.
-
-					[CONTEXT] - {context}
-
-					You need to check if your answer is correct and if you find some errors or ignorance of
-					necessary details you need to modify your answer. If you think the context does not add
-					anything - output the original answer. Give a step by step explanation.
-					[/INST]
-
-				'''
-
-
-
-	auth_token = "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"
-
-	prompt = {
-	"inputs": f"{prompt_template}",
-	"parameters" : {
-		"max_new_tokens" : 1000, 
-		"temperature" : 0.2
-
-	}
-	}
-
-	print(prompt_template)
-
-	response = requests.post(API_URL, headers=headers, json=prompt)
 	
-	return response.json()[0]['generated_text'].split("[/INST]")[2]
-	
+	zero_shot_COT = get_openai_response(query)
+	steps= zero_shot_COT.split('\n\n')
 
-	#print(prompt_template)
+	if(!len(steps)):
+		return "Error in getting Initial COT steps"
+
+	answer = ""
+	
+	for step_num, step_cont in enumerate(steps):
+		answer = answer + '\n\n' + step_cont
+
+		generated_query = gen_question(query, answer)
+
+		similar_posts = find_simposts_in_db(db, generated_query, 3)
+	
+		for post in similar_posts:
+			answer = revise_ans(query, answer, post)
+	return answer
+
+
 
 
 
@@ -116,15 +147,17 @@ if __name__ == "__main__":
 	
 	# for test purposes
 
-	site_url = "http://wasserstoff-test-site.local:10003"
+	site_url = "https://legal-wires.com"
 	embedding_model = "Alibaba-NLP/gte-large-en-v1.5"
-	db = FAISSVectorDB(site_url, embedding_model, 128)
-	db.init_vector_db()
+	db = FAISSVectorDB(site_url, embedding_model, 256)
+	#db.init_vector_db()
 
 	#loads the db - for test purposes
 
 	index= db.load_index_db()
 	embedding_list = list(db.embeddings.values())
+	similar_posts = find_simposts_in_db(db, "what is THE FATAL ACCIDENTS ACT, 1855", 5)
 
-	query= "Name some birds found in the Himalayas in India?"
-	print(generate_rag_response(db,query))
+	query= "what is THE FATAL ACCIDENTS ACT, 1855"
+
+	print(generate_rag_response(db,query,similar_posts))

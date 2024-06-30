@@ -31,63 +31,6 @@ except Exception as e:
 	print("Initializing API")
 
 
-openai_api = OpenAI(api_key = "")
-
-def get_openai_response(query):
-	draft_prompt """
-	NOTE: Answer the following question in a step-by-step manner.
-	Be Careful! Answer the question in a structural manner and in several paragraphs. Use '\n\n' to
-	split the answer into paragraphs. Respond to the question directly without any explanation or introductions anywhere  
-	"""
-
-	system_prompt = """You are GPT-3.5 Turbo. You will be answering a series of Questions and Answers like an 
-						intelligent chatbot connected to a WordPress Blog
-
-	"""
-
-	zero_shot_COT= openai_api.chat.completions.create(
-		model= "gpt-3.5-turbo",
-		messages = [
-			{
-				"role" : "system",
-				"content" : system_prompt
-			},
-			{
-				"role" : "user",
-				"content" : f"Question - {query}" + draft_prompt
-			}
-		],
-		temperature= 0.3
-
-		).choices[0].message.content 
-
-	return zero_shot_COT
-
-def gen_question(question, answer):
-	quest_prompt = """
-I want to verify the correctness of the given question, especially giving important to the last sentences.
-Please summarize the content with a follow up question which will correctly correspond. You need to ensure that
-some important keywords of the answer/content are included in this query. Give special importance to the last few sentences
-**IMPORTANT**
-Just output the query directly! Do not add explanations and introducement along with it. 
-	"""
-
-	new_question = openai_api.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": chatgpt_system_prompt
-            },
-            {
-                "role": "user",
-                "content": f"##Question: {question}\n\n##Content: {answer}\n\n##Instruction: {quest_prompt}"
-            }
-        ],
-        temperature = 1.0
-    ).choices[0].message.content
-    return new_question
-
 
 @app_chatbot.route('/update-vector-db', methods = ["POST"])
 def update_vector_db():

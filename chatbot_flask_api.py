@@ -119,8 +119,8 @@ def chatbot():
 		db_to_get= website_db[wordpress_site]
 		
 		if query != "":
-			similar_posts = gen_vector_db.find_simposts_in_db(db_to_get, query, 10)
-			response = RAG_gen.generate_rag_response(db_to_get, query, similar_posts)
+			init_similar_posts = gen_vector_db.find_simposts_in_db(db_to_get, query, 10)
+			response = RAG_gen.generate_rag_response(db_to_get, query, init_similar_posts)
 
 			json_resp = jsonify({"chatbot_response" : response})
 			print(json_resp)
