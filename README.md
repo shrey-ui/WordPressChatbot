@@ -3,7 +3,7 @@
 This project integrates a Query Suggestion Chatbot with Chain of Thought functionality into WordPress sites using a Flask backend. 
 It also uses a RAG in the backend using a FAISS Vector DB. This RAG backend is combined with Chain of Thought querying using RAT (Retrieval Augmented Thoughts).
 
-![alt text](https://github.com/shrey-ui/WordPressChatbot/assets/RAT_pic.png?raw=true)
+![Explanation of Retrieval Augemented Thoughts](assets/RAT_pic.png)
 
 ## Table of Contents
 
