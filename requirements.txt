@@ -1,3 +1,4 @@
+openai
 transformers
 faiss-cpu
 sentence-transformers

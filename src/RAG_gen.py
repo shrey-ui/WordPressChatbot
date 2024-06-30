@@ -4,7 +4,8 @@ from gen_vector_db import FAISSVectorDB, find_simposts_in_db
 from torch import cuda
 import torch
 import requests
-
+from secret import OPENAI_API_KEY
+from openai import OpenAI
 
 
 # Retrieving Similar posts and then prompting the LLM
